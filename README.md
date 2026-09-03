@@ -9,8 +9,8 @@ platform, no cryptography, no device.
 
 ```go
 r, err := mfa.Verify(ctx, mfa.Policy{Count: 2, DistinctKinds: true},
-    touchID,      // go-macos/localauthentication
-    securityKey,  // go-authn/fido
+    factors.TouchID("unlock the vault"),         // go-macos/factors, over LocalAuthentication
+    factors.SecurityKey("example.test", credID), // go-macos/factors, over go-authn/fido
 )
 if err != nil {
     fmt.Println(err)   // "2 factor(s) needed, 1 answered: your security key (possession): not plugged in"
@@ -49,5 +49,17 @@ towards the kinds — it cannot be shown to differ from anything.
 - **There is no default policy.** The zero `Policy` is refused rather than
   guessed at: how much proof is enough belongs to whoever is protecting the
   thing, not to a library.
+
+## Where the factors come from
+
+Nothing here reaches a device, on purpose: this package decides, and the
+things it asks live elsewhere. On macOS they are
+[go-macos/factors](https://github.com/go-macos/factors) — Touch ID over
+LocalAuthentication, and a security key over
+[go-authn/fido](https://github.com/go-authn/fido).
+
+A binding does not implement `Factor` itself. If it did, every program that
+only wanted to show a Touch ID prompt would pull in a policy package, so the
+adapters sit above both and nothing below them knows what a policy is.
 
 Covered to 100%, on every platform, with no hardware.
