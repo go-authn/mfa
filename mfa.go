@@ -88,6 +88,20 @@ type Factor interface {
 // laptop with no fingerprint reader has not refused anyone.
 var ErrUnavailable = errors.New("mfa: this factor cannot be asked here")
 
+// Unavailable marks an error as "there was nothing here to ask", keeping the
+// reason: an empty USB port, a person with no authenticator enrolled, a
+// sensor this machine does not have.
+//
+// It lives here rather than in each adapter because it constructs THIS
+// package's sentinel, and because the second adapter that needed it was about
+// to copy the first one's three lines. [Answer.Unavailable] is the other half.
+func Unavailable(err error) error {
+	if err == nil {
+		return ErrUnavailable
+	}
+	return fmt.Errorf("%w: %w", ErrUnavailable, err)
+}
+
 // Policy is what "enough" means.
 //
 // The zero Policy is not usable and [Verify] says so rather than guessing:
