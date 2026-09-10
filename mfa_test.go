@@ -237,3 +237,34 @@ func TestRefusalsWhenNothingRefused(t *testing.T) {
 		t.Errorf("refusals = %q", got)
 	}
 }
+
+// Unavailable marks a reason without losing it, and reads as unavailable to
+// the thing that has to count it.
+func TestUnavailableKeepsTheReason(t *testing.T) {
+	reason := errors.New("no key is plugged in")
+	err := Unavailable(reason)
+	if !errors.Is(err, ErrUnavailable) {
+		t.Error("the marked error is not unavailable")
+	}
+	if !errors.Is(err, reason) {
+		t.Error("the reason was lost")
+	}
+	if !strings.Contains(err.Error(), "no key is plugged in") {
+		t.Errorf("the message reads %q", err)
+	}
+	// A factor answering it is counted as not asked, rather than as a refusal.
+	r, err := Verify(context.Background(), Policy{Count: 1},
+		touchID(Unavailable(reason)), key(nil))
+	if err != nil {
+		t.Fatalf("a satisfied policy reported %v", err)
+	}
+	if !r.Answers[0].Unavailable() {
+		t.Error("the answer does not read as unavailable")
+	}
+
+	// Nothing to say is still unavailable: an adapter with no detail should
+	// not have to invent one.
+	if !errors.Is(Unavailable(nil), ErrUnavailable) {
+		t.Error("Unavailable(nil) is not unavailable")
+	}
+}
