@@ -49,9 +49,16 @@ towards the kinds — it cannot be shown to differ from anything.
 - **A factor not reached is not reported as failed.** It has no entry in the
   result at all, because saying it failed would send somebody after nothing.
 - **The same factor twice is one factor.** Two factors of the same type
-  holding the same values (`reflect.DeepEqual`) are refused before anything is
-  asked: counted twice, one passphrase passed twice satisfied `Count: 2`. Two
-  keys that differ in anything — a name, a credential ID — are two factors.
+  holding the same values are refused before anything is asked: counted twice,
+  one passphrase passed twice satisfied `Count: 2`. Two keys that differ in
+  anything — a name, a credential ID — are two factors.
+  ⛔ "The same values" includes funcs, which `reflect.DeepEqual` (used here
+  first) never finds equal: a factor holding an opener or a callback, as
+  `go-authn/keyfactor`'s does, passed twice, was counted twice. A func is now
+  the same func when it runs the same code. That is all reflection can see, so
+  two closures from one literal that differ only in what they captured are
+  taken for one factor and refused — the safe side; give them any other field
+  that differs.
 - **A kind outside the enum is not a kind.** A factor whose `Kind()` is not
   `Unknown`, `Knowledge`, `Possession` or `Inherence` is refused, whatever the
   policy, before anything is asked: counted as a distinct kind, `Kind(42)` next
