@@ -13,7 +13,7 @@ r, err := mfa.Verify(ctx, mfa.Policy{Count: 2, DistinctKinds: true},
     factors.SecurityKey("example.test", credID), // go-macos/factors, over go-authn/fido
 )
 if err != nil {
-    fmt.Println(err)   // "2 factor(s) needed, 1 answered: your security key (possession): not plugged in"
+    fmt.Println(err)   // "mfa: 2 factor(s) needed, 1 answered: your security key (possession): not available"
 }
 ```
 
