@@ -46,6 +46,14 @@ towards the kinds — it cannot be shown to differ from anything.
   `StopOnFirstFailure` is there when that is wanted, and off otherwise.
 - **A factor not reached is not reported as failed.** It has no entry in the
   result at all, because saying it failed would send somebody after nothing.
+- **The same factor twice is one factor.** Two factors of the same type
+  holding the same values (`reflect.DeepEqual`) are refused before anything is
+  asked: counted twice, one passphrase passed twice satisfied `Count: 2`. Two
+  keys that differ in anything — a name, a credential ID — are two factors.
+- **A kind outside the enum is not a kind.** A factor whose `Kind()` is not
+  `Unknown`, `Knowledge`, `Possession` or `Inherence` is refused, whatever the
+  policy, before anything is asked: counted as a distinct kind, `Kind(42)` next
+  to a passphrase passed as two-factor.
 - **There is no default policy.** The zero `Policy` is refused rather than
   guessed at: how much proof is enough belongs to whoever is protecting the
   thing, not to a library.

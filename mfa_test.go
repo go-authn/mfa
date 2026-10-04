@@ -268,3 +268,102 @@ func TestUnavailableKeepsTheReason(t *testing.T) {
 		t.Error("Unavailable(nil) is not unavailable")
 	}
 }
+
+// ⛔ The same factor offered twice is one factor. Counting it twice let one
+// passphrase, passed twice, satisfy a Count of two -- asked twice, counted
+// twice. It is refused before anything is asked.
+func TestTheSameFactorTwiceIsOneFactor(t *testing.T) {
+	var asked int
+	pw := fake{name: "your passphrase", kind: Knowledge, asked: &asked}
+	for _, c := range []struct {
+		name    string
+		p       Policy
+		factors []Factor
+	}{
+		{"twice", Policy{Count: 2}, []Factor{pw, pw}},
+		{"twice among others", Policy{Count: 2}, []Factor{key(nil), pw, touchID(nil), pw}},
+		{"an equal copy", Policy{Count: 2}, []Factor{pw, fake{name: "your passphrase", kind: Knowledge, asked: &asked}}},
+		{"the same pointer", Policy{Count: 2}, []Factor{&pw, &pw}},
+		{"a count of one", Policy{Count: 1}, []Factor{pw, pw}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			asked = 0
+			r, err := Verify(context.Background(), c.p, c.factors...)
+			if err == nil {
+				t.Fatalf("accepted: %s", r)
+			}
+			if !strings.Contains(err.Error(), "twice") || !strings.Contains(err.Error(), "your passphrase") {
+				t.Errorf("the error says %q, which does not say what was offered twice", err)
+			}
+			if asked != 0 {
+				t.Errorf("the factor was asked %d time(s) before the refusal", asked)
+			}
+			if r.Satisfied != 0 || len(r.Answers) != 0 {
+				t.Errorf("a refused attempt reported %s", r)
+			}
+		})
+	}
+	// Two factors that differ in anything -- here only what they answer --
+	// are two, which is what lets somebody hold two keys on purpose.
+	if _, err := Verify(context.Background(), Policy{Count: 2},
+		fake{name: "your security key", kind: Possession, err: nil},
+		fake{name: "your security key", kind: Possession, err: errors.New("x")}); err == nil {
+		t.Error("a refusing factor was counted")
+	} else if strings.Contains(err.Error(), "twice") {
+		t.Errorf("two different factors were taken for one: %v", err)
+	}
+	if _, err := Verify(context.Background(), Policy{Count: 2}, keyNamed("key A"), keyNamed("key B")); err != nil {
+		t.Errorf("two different keys were refused: %v", err)
+	}
+	// A factor whose type cannot be compared with == is still compared, and
+	// still not a panic.
+	if _, err := Verify(context.Background(), Policy{Count: 2}, codes{"a", []byte("1")}, codes{"a", []byte("1")}); err == nil || !strings.Contains(err.Error(), "twice") {
+		t.Errorf("an uncomparable factor offered twice gave %v", err)
+	}
+	if _, err := Verify(context.Background(), Policy{Count: 2}, codes{"a", []byte("1")}, codes{"a", []byte("2")}); err != nil {
+		t.Errorf("two different uncomparable factors gave %v", err)
+	}
+}
+
+func keyNamed(name string) fake { return fake{name: name, kind: Possession} }
+
+// codes is a factor holding a slice, as one holding a typed code does: its
+// values cannot be compared with ==, which panics on them.
+type codes struct {
+	name string
+	code []byte
+}
+
+func (c codes) Name() string                 { return c.name }
+func (c codes) Kind() Kind                   { return Possession }
+func (c codes) Verify(context.Context) error { return nil }
+
+// ⛔ A kind outside the three (and Unknown) is not a kind. Counting it as a
+// distinct one let Knowledge and Kind(42) pass as two-factor. It is refused
+// before anything is asked, whatever the policy: a factor that misreports
+// what it proves cannot be counted for anything.
+func TestAKindOutsideTheEnumIsRefused(t *testing.T) {
+	for _, k := range []Kind{Kind(42), Kind(-1), Inherence + 1} {
+		for _, p := range []Policy{{Count: 2, DistinctKinds: true}, {Count: 2}, {Count: 1}} {
+			var asked int
+			odd := fake{name: "security question", kind: k, asked: &asked}
+			r, err := Verify(context.Background(), p, pass(nil), odd)
+			if err == nil {
+				t.Errorf("%s, %+v: accepted: %s", k, p, r)
+				continue
+			}
+			if !strings.Contains(err.Error(), "security question") || !strings.Contains(err.Error(), k.String()) {
+				t.Errorf("%s, %+v: the error says %q, which does not name the factor and its kind", k, p, err)
+			}
+			if asked != 0 || len(r.Answers) != 0 {
+				t.Errorf("%s, %+v: asked %d time(s), %d answers, before the refusal", k, p, asked, len(r.Answers))
+			}
+		}
+	}
+	// The four that exist are all accepted, Unknown included.
+	for _, k := range []Kind{Unknown, Knowledge, Possession, Inherence} {
+		if _, err := Verify(context.Background(), Policy{Count: 1}, fake{name: "f", kind: k}); err != nil {
+			t.Errorf("%s was refused: %v", k, err)
+		}
+	}
+}

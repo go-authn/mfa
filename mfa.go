@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -67,6 +68,12 @@ func (k Kind) String() string {
 		return "unknown"
 	}
 	return fmt.Sprintf("Kind(%d)", int(k))
+}
+
+// classified reports whether the kind is one of the three that count towards
+// [Policy.DistinctKinds]. Unknown is not, and neither is any other value.
+func (k Kind) classified() bool {
+	return k == Knowledge || k == Possession || k == Inherence
 }
 
 // Factor is one way of asking whether the person is here.
@@ -190,20 +197,44 @@ func Verify(ctx context.Context, p Policy, factors ...Factor) (Result, error) {
 			p.Count, len(factors))
 	}
 
+	// Everything that can be refused without asking anybody is refused
+	// before anybody is asked. Each kind is read once, and the value checked
+	// is the value counted.
+	declared := make([]Kind, len(factors))
+	for i, f := range factors {
+		declared[i] = f.Kind()
+		// ⛔ A kind outside the enum is not a fourth kind: counted as one, it
+		// made a passphrase and a Kind(42) "two kinds". A factor that
+		// misreports what it proves is refused, whatever the policy asks.
+		if declared[i] != Unknown && !declared[i].classified() {
+			return Result{}, fmt.Errorf("mfa: %s says it proves %s, which is not a kind", f.Name(), declared[i])
+		}
+		// ⛔ The same factor twice is one factor: counted twice, one
+		// passphrase passed twice satisfied a Count of two. "The same" is
+		// the same type holding the same values -- DeepEqual, which neither
+		// panics on a type == cannot compare nor tells apart two keys that
+		// differ in anything.
+		for _, g := range factors[:i] {
+			if reflect.DeepEqual(f, g) {
+				return Result{}, fmt.Errorf("mfa: %s was offered twice, and the same factor is one factor", f.Name())
+			}
+		}
+	}
+
 	var r Result
 	kinds := map[Kind]bool{}
-	for _, f := range factors {
+	for i, f := range factors {
 		if err := ctx.Err(); err != nil {
 			return r, fmt.Errorf("mfa: gave up part way through: %w", err)
 		}
-		a := Answer{Name: f.Name(), Kind: f.Kind(), Err: f.Verify(ctx)}
+		a := Answer{Name: f.Name(), Kind: declared[i], Err: f.Verify(ctx)}
 		r.Answers = append(r.Answers, a)
 		if a.OK() {
 			r.Satisfied++
 			// An unclassified factor counts towards the number satisfied but
 			// never towards the kinds: it cannot be shown to differ from
 			// anything.
-			if a.Kind != Unknown {
+			if a.Kind.classified() {
 				kinds[a.Kind] = true
 			}
 		}
@@ -246,7 +277,7 @@ func kindList(r Result) string {
 	seen := map[string]bool{}
 	var names []string
 	for _, a := range r.Answers {
-		if a.OK() && a.Kind != Unknown && !seen[a.Kind.String()] {
+		if a.OK() && a.Kind.classified() && !seen[a.Kind.String()] {
 			seen[a.Kind.String()] = true
 			names = append(names, a.Kind.String())
 		}
