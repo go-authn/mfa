@@ -30,7 +30,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 )
@@ -211,11 +210,11 @@ func Verify(ctx context.Context, p Policy, factors ...Factor) (Result, error) {
 		}
 		// ⛔ The same factor twice is one factor: counted twice, one
 		// passphrase passed twice satisfied a Count of two. "The same" is
-		// the same type holding the same values -- DeepEqual, which neither
-		// panics on a type == cannot compare nor tells apart two keys that
-		// differ in anything.
+		// the same type holding the same values, funcs included -- see
+		// sameFactor, which neither panics on a type == cannot compare nor
+		// tells apart two keys that differ in anything.
 		for _, g := range factors[:i] {
-			if reflect.DeepEqual(f, g) {
+			if sameFactor(f, g) {
 				return Result{}, fmt.Errorf("mfa: %s was offered twice, and the same factor is one factor", f.Name())
 			}
 		}
