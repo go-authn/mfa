@@ -39,7 +39,9 @@ towards the kinds — it cannot be shown to differ from anything.
 
 - **A factor that could not be asked has not failed.** A laptop with no
   fingerprint reader refused nobody. `ErrUnavailable` is reported separately,
-  and it never ends an attempt.
+  and it never ends an attempt. An adapter returns `mfa.Unavailable(err)`,
+  which wraps that sentinel and keeps the reason (an empty USB port, nobody
+  enrolled); `Answer.Unavailable` reads it back.
 - **Every factor is asked by default.** Telling a person *your key answered,
   your fingerprint did not* needs both answers; stopping at the first failure
   tells them one thing at a time, across as many attempts as they have factors.
